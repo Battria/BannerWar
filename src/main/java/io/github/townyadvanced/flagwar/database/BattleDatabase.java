@@ -85,10 +85,7 @@ public final class BattleDatabase {
                 ps.setString(12, BattleUtil.fromLocation(r.spawn()));
                 ps.setString(13, BattleUtil.fromLocations(r.outpostSpawns()));
 
-                if (ps.executeUpdate() > 0)
-                    LOGGER.info("Successfully added battle " + r.contestedTown() + " to database!");
-                else
-                    LOGGER.warning("Failed to add battle " + r.contestedTown() + " to database!");
+                ps.executeUpdate();
 
             } catch (SQLException e) {
                 LOGGER.severe(e.getMessage());

@@ -16,6 +16,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
+
     <licenses>
         <license>
             <name>Apache License, Version 2.0</name>
@@ -153,8 +154,6 @@
             <groupId>town.sheepy</groupId>
             <artifactId>WayFinderAPI</artifactId>
             <version>1.0</version>
-            <scope>system</scope>
-            <systemPath>${project.basedir}/libs/WayfinderAPI-1.0.jar</systemPath>
         </dependency>
         <dependency>
             <groupId>town.sheepy</groupId>

@@ -309,6 +309,8 @@ public class CellUnderAttack extends Cell {
     public void updateFlag() {
         Material[] timer = FlagWarConfig.getTimerBlocks();
 
+        if (isInfernal()) updateFlagToInfernalState();
+
         if (!hasEnded() && !shouldNotSwitchColor()) {
 
             flagTimerBlock.setType(timer[flagPhaseID]);
@@ -549,7 +551,7 @@ public class CellUnderAttack extends Cell {
      */
     public int decrementLife() {
         lives--;
-        if (isInfernal()) makeInfernal();
+        if (isInfernal()) updateFlagToInfernalState();
         makeInvincible();
 
         updateFlag();
@@ -584,6 +586,10 @@ public class CellUnderAttack extends Cell {
      */
     private void makeInfernal() {
         flagTimeLeft = flagTimeLeft.plusSeconds(BannerWarConfig.getInfernalLifeTimeIncrease());
+        updateFlagToInfernalState();
+    }
+
+    private void updateFlagToInfernalState() {
         flagTimerBlock.setType(BannerWarConfig.getInfernalWarFlagMaterial());
         FlagWar.getFlagWar().getWaypointManager().updateWaypointColor(this);
     }
