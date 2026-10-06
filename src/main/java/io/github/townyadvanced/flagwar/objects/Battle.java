@@ -69,6 +69,9 @@ public class Battle {
     /** Holds the {@link BattleManager} instance. */
     private final BattleManager MANAGER;
 
+    /** Holds the {@link Town} at which the battle is held. */
+    private final Resident BANNER_PLACER;
+
     /**
      * Sets up a battle between an attacking nation and a defending nation. <br>
      * @param attacker the attacking nation
@@ -81,7 +84,7 @@ public class Battle {
      * @param stage the {@link BattleStage} of the battle
      * @param initialMayor the {@link Resident} who was mayor of the {@link #CONTESTED_TOWN} at the time of the attack
      */
-    private Battle(Nation attacker, Nation defender, Town contestedTown, Collection<WorldCoord> preWarBlocks, long stm, TownBlock homeBlock, Location spawn, List<Location> outpostSpawns, boolean isCityState, BattleStage stage, Resident initialMayor, BattleManager mgr) {
+    private Battle(Nation attacker, Nation defender, Town contestedTown, Collection<WorldCoord> preWarBlocks, long stm, TownBlock homeBlock, Location spawn, List<Location> outpostSpawns, boolean isCityState, BattleStage stage, Resident initialMayor, BattleManager mgr, Resident bannerPlacer) {
         this.ATTACKER = attacker;
         this.DEFENDER = defender;
         this.CONTESTED_TOWN = contestedTown;
@@ -96,6 +99,7 @@ public class Battle {
         this.INITIAL_OUTPOST_SPAWNS = copyLocations(outpostSpawns);
         this.STAGE_DURATIONS = BattleUtil.computeStageTimes(this);
         this.MANAGER = mgr;
+        this.BANNER_PLACER = bannerPlacer;
 
         createBossBar();
     }
@@ -108,7 +112,7 @@ public class Battle {
      * @param contestedTown the town at which the battle is held
      * @param isCityState whether this battle's town is a City State or not.
      */
-    public Battle(Nation attacker, Nation defender, Town contestedTown, boolean isCityState, BattleManager mgr) {
+    public Battle(Nation attacker, Nation defender, Town contestedTown, boolean isCityState, BattleManager mgr, Resident bannerPlacer) {
         this(attacker,
             defender,
             contestedTown,
@@ -123,7 +127,8 @@ public class Battle {
             isCityState,
             BattleStage.PRE_FLAG,
             contestedTown.getMayor(),
-            mgr
+            mgr,
+            bannerPlacer
         );
         var chunks = BattleUtil.chunksFrom(getInitialTownBlocks());
         WorldEditService.copyToDisk(contestedTown, BattleUtil.boundingBoxFrom(chunks));
@@ -147,7 +152,8 @@ public class Battle {
             br.isCityState(),
             br.stage(),
             TownyAPI.getInstance().getResident(br.initialMayorID()),
-            mgr
+            mgr,
+            br.bannerPlacer()
         );
     }
 
@@ -263,6 +269,13 @@ public class Battle {
     public void setStage(BattleStage stage) {
         stageStartTimeMillis = System.currentTimeMillis();
         this.stage = stage;
+    }
+
+    /**
+     * @return the {@link Resident} who placed the banner that initiated this battle
+     */
+    public Resident getBannerPlacer() {
+        return BANNER_PLACER;
     }
 
     /** Returns whether this battle's {@link #CONTESTED_TOWN} is a City State or not. */

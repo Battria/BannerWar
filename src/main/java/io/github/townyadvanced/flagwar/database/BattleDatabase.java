@@ -53,7 +53,8 @@ public final class BattleDatabase {
                             BattleUtil.toWorldCoords(rs.getString(9), rs.getString(10)),
                             UUID.fromString(rs.getString(11)),
                             BattleUtil.toLocation(rs.getString(12)),
-                            BattleUtil.toLocations(rs.getString(13))
+                            BattleUtil.toLocations(rs.getString(13)),
+                            TownyAPI.getInstance().getResident(rs.getString(14))
                         ));
                     }
                     return battles;
@@ -66,9 +67,8 @@ public final class BattleDatabase {
     }
 
     public CompletableFuture<Void> insertBattle(BattleRecord r) {
-
         return CompletableFuture.runAsync(() -> {
-            String query = "INSERT INTO " + BATTLE_TABLE + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)";
+            String query = "INSERT INTO " + BATTLE_TABLE + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
             try (PreparedStatement ps = MANAGER.getConnection().prepareStatement(query)) {
 
                 ps.setString(1, r.contestedTown());
@@ -84,6 +84,7 @@ public final class BattleDatabase {
                 ps.setString(11, r.initialMayorID().toString());
                 ps.setString(12, BattleUtil.fromLocation(r.spawn()));
                 ps.setString(13, BattleUtil.fromLocations(r.outpostSpawns()));
+                ps.setString(14, r.bannerPlacer().getName());
 
                 ps.executeUpdate();
 
@@ -96,7 +97,7 @@ public final class BattleDatabase {
     @CanIgnoreReturnValue
     public CompletableFuture<Void> insertOrUpdate(BattleRecord r) {
         return CompletableFuture.runAsync(() -> {
-            String query = "INSERT OR REPLACE INTO " + BATTLE_TABLE + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)";
+            String query = "INSERT OR REPLACE INTO " + BATTLE_TABLE + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
             try (PreparedStatement ps = MANAGER.getConnection().prepareStatement(query)) {
 
                 ps.setString(1, r.contestedTown());
@@ -112,6 +113,7 @@ public final class BattleDatabase {
                 ps.setString(11, r.initialMayorID().toString());
                 ps.setString(12, BattleUtil.fromLocation(r.spawn()));
                 ps.setString(13, BattleUtil.fromLocations(r.outpostSpawns()));
+                ps.setString(14, r.bannerPlacer().getName());
 
                 if (ps.executeUpdate() <= 0)
                     LOGGER.warning("Failed to add battle " + r.contestedTown() + " to database!");

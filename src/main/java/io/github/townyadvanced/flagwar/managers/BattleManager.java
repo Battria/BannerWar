@@ -1,10 +1,7 @@
 package io.github.townyadvanced.flagwar.managers;
 
 import com.palmergames.bukkit.towny.TownyAPI;
-import com.palmergames.bukkit.towny.object.Nation;
-import com.palmergames.bukkit.towny.object.Town;
-import com.palmergames.bukkit.towny.object.TownBlock;
-import com.palmergames.bukkit.towny.object.WorldCoord;
+import com.palmergames.bukkit.towny.object.*;
 import io.github.townyadvanced.flagwar.BannerWarAPI;
 import io.github.townyadvanced.flagwar.FlagWar;
 import io.github.townyadvanced.flagwar.database.BattleDatabase;
@@ -151,17 +148,17 @@ public final class BattleManager {
      * @param attacker the nation that initiated the {@link Battle}
      * @param defender the nation that houses the {@link Town} where the {@link Battle} is hosted
      */
-    public void startBattle(Town contestedTown, Nation attacker, Nation defender, Town bannerPlacer) {
+    public void startBattle(Town contestedTown, Nation attacker, Nation defender, Resident bannerPlacer) {
 
         TownyAI.getTownyAIAPI().isCityStateAsync(contestedTown.getName()).thenAccept(result ->
             CompletableFuture.runAsync(() -> {
-
-                Battle battle = new Battle(attacker, defender, contestedTown, result, this);
+                Town bannerPlacerTown = bannerPlacer.getTownOrNull();
+                Battle battle = new Battle(attacker, defender, contestedTown, result, this, bannerPlacer);
                 ACTIVE_BATTLES.put(contestedTown.getName(), battle);
 
-                logBannerPlacer(BannerPlacerRecord.of(bannerPlacer));
+                logBannerPlacer(BannerPlacerRecord.of(bannerPlacerTown));
 
-                Bukkit.getServer().getPluginManager().callEvent(new BattleStartEvent(battle, bannerPlacer));
+                Bukkit.getServer().getPluginManager().callEvent(new BattleStartEvent(battle, bannerPlacerTown));
 
             }, runnable -> SCHEDULER.runTask(PLUGIN, runnable))
         );

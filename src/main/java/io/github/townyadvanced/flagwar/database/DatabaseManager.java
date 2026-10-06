@@ -37,7 +37,8 @@ public final class DatabaseManager {
             TownBlocks TEXT NOT NULL,
             InitialMayor TEXT NOT NULL,
             Spawn TEXT,
-            OutpostSpawns TEXT NOT NULL DEFAULT ''
+            OutpostSpawns TEXT NOT NULL DEFAULT '',
+            BannerPlacer TEXT NOT NULL
         );
         """,
         """

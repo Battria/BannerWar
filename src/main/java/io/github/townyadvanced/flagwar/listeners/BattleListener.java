@@ -95,7 +95,6 @@ public class BattleListener implements Listener {
             return;
         }
 
-
         if (defender == null && battle == null) {
             Broadcasts.sendErrorMessage(event.getPlayer(), "This town is not part of a nation!");
             return;
@@ -154,7 +153,9 @@ public class BattleListener implements Listener {
         }
 
         event.setCancelled(false);
-        BATTLE_MANAGER.startBattle(town, attacker, defender, r.getTownOrNull());
+
+
+        BATTLE_MANAGER.startBattle(town, attacker, defender, r);
     }
 
     @EventHandler

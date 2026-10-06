@@ -1,5 +1,6 @@
 package io.github.townyadvanced.flagwar.objects;
 
+import com.palmergames.bukkit.towny.object.Resident;
 import com.palmergames.bukkit.towny.object.TownBlock;
 import com.palmergames.bukkit.towny.object.WorldCoord;
 import io.github.townyadvanced.flagwar.FlagWar;
@@ -39,7 +40,8 @@ public record BattleRecord (
     Collection<WorldCoord> townBlocksCoords,
     UUID initialMayorID,
     Location spawn,
-    List<Location> outpostSpawns
+    List<Location> outpostSpawns,
+    Resident bannerPlacer
 )
 {
     public static BattleRecord of(Battle b) {
@@ -57,7 +59,8 @@ public record BattleRecord (
                 BattleUtil.toWorldCoords(b.getInitialTownBlocks()),
                 b.getInitialMayor().getUUID(),
                 b.getInitialSpawn(),
-                b.getInitialOutpostSpawns()
+                b.getInitialOutpostSpawns(),
+                b.getBannerPlacer()
             );
         } catch (Exception e)  {
             FlagWar.getInstance().getLogger().severe("Error while creating BattleRecord: " + e.getMessage()
