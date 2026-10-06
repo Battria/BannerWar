@@ -64,6 +64,8 @@ public final class BattleManager {
                     DATABASE.deleteBattle(r.contestedTown());
                     continue;
                 }
+                
+                if (Bukkit.getWorld(r.worldID()) == null) continue;
 
                 Battle battle = new Battle(r, this);
                 ACTIVE_BATTLES.put(r.contestedTown(), battle);
