@@ -22,9 +22,6 @@ public final class WaypointManager {
     /** Color used by Wayfinder while an infernal flag displays ancient debris. */
     private static final Color ANCIENT_DEBRIS_COLOR = Color.fromRGB(0x4A2A23);
 
-    /** Holds the {@link JavaPlugin} instance. */
-    private final JavaPlugin PLUGIN;
-
     /** Holds the {@link Logger} of this class. */
     private final Logger LOGGER;
 
@@ -32,9 +29,8 @@ public final class WaypointManager {
     private WaypointService SERVICE;
 
     public WaypointManager(JavaPlugin plugin) {
-        this.PLUGIN = plugin;
         LOGGER = plugin.getLogger();
-        Bukkit.getScheduler().runTaskLater(PLUGIN, this::assignAPI, 1);
+        Bukkit.getScheduler().runTaskLater(plugin, this::assignAPI, 1);
     }
 
     private void assignAPI() {
