@@ -9,6 +9,11 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
+import org.bukkit.util.BoundingBox;
+import org.bukkit.util.Vector;
+
+import java.util.ArrayList;
+import java.util.Collection;
 
 /**
  * This class provides static functions that are used solely by the {@link WorldEditService} to keep both classes tidy.
@@ -56,6 +61,48 @@ final class WorldEditHelper {
             blacklistMask.add(BukkitAdapter.asBlockType(material));
         }
         return blacklistMask.inverse();
+    }
+
+    static Vector extractOriginFromName(String name) {
+        String[] parts = name.split("_");
+        return new Vector(Double.parseDouble(parts[1]), Double.parseDouble(parts[2]), Double.parseDouble(parts[3]));
+    }
+
+    /**
+     * Splits a given box into a {@link Collection} of bounding boxes.
+     * @param box the given box
+     * @param limits the maximum size of dimensions in each box.
+     */
+    static Collection<BoundingBox> split(BoundingBox box, Vector limits) {
+        Collection<BoundingBox> boxes = new ArrayList<>();
+
+        int minX = (int) Math.floor(box.getMinX());
+        int minY = (int) Math.floor(box.getMinY());
+        int minZ = (int) Math.floor(box.getMinZ());
+
+        int maxX = (int) Math.ceil(box.getMaxX());
+        int maxY = (int) Math.ceil(box.getMaxY());
+        int maxZ = (int) Math.ceil(box.getMaxZ());
+
+        int gridStepX = limits.getBlockX();
+        int gridStepY = limits.getBlockY();
+        int gridStepZ = limits.getBlockZ();
+
+        for (int x = minX; x < maxX; x += gridStepX) {
+            int upperX = Math.min(x + gridStepX, maxX);
+
+            for (int y = minY; y < maxY; y += gridStepY) {
+                int upperY = Math.min(y + gridStepY, maxY);
+
+                for (int z = minZ; z < maxZ; z += gridStepZ) {
+                    int upperZ = Math.min(z + gridStepZ, maxZ);
+
+                    boxes.add(new BoundingBox(x, y, z, upperX, upperY, upperZ));
+                }
+            }
+        }
+
+        return boxes;
     }
 
 }

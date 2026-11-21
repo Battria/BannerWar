@@ -131,7 +131,7 @@ public class Battle {
             bannerPlacer
         );
         var chunks = BattleUtil.chunksFrom(getInitialTownBlocks());
-        WorldEditService.copyToDisk(contestedTown, BattleUtil.boundingBoxFrom(chunks));
+        WorldEditService.copyTownToDisk(contestedTown, chunks);
     }
 
     /**
@@ -363,7 +363,7 @@ public class Battle {
         setStage(BattleStage.DORMANT);
         deleteBossBar();
 
-        WorldEditService.pasteToWorld(getContestedTown()).thenRunAsync(() ->
+        WorldEditService.pasteTownToWorld(getContestedTown()).thenRunAsync(() ->
             Bukkit.getScheduler().runTask(FlagWar.getInstance(), () ->
                 Bukkit.getPluginManager().callEvent(new TownRegenerationFinishEvent(this))
             )
