@@ -4,7 +4,11 @@ import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldedit.extent.Extent;
 import com.sk89q.worldedit.function.mask.BlockTypeMask;
 import com.sk89q.worldedit.function.mask.Mask;
-import io.github.townyadvanced.flagwar.config.BannerWarConfig;
+import com.sk89q.worldedit.math.BlockVector3;
+import com.sk89q.worldedit.regions.CuboidRegion;
+import com.palmergames.bukkit.towny.object.TownBlock;
+import com.palmergames.bukkit.towny.object.WorldCoord;
+import com.palmergames.bukkit.towny.TownyAPI;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -14,6 +18,9 @@ import org.bukkit.util.Vector;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.nio.file.Path;
+
+import static io.github.townyadvanced.flagwar.worldedit.SnapshotManifest.Bounds;
 
 /**
  * This class provides static functions that are used solely by the {@link WorldEditService} to keep both classes tidy.
@@ -50,22 +57,71 @@ final class WorldEditHelper {
     }
 
     /**
-     * Adds every material in {@link BannerWarConfig#getBlacklistedMaterials()} to a BlockTypeMask
+     * Adds the materials captured on the server thread to a BlockTypeMask
      * and returns its negation so that the materials are excluded.
      * @param extent the {@link Extent} to have its black listed materials masked
      */
-    static Mask createBlockBlacklistMask(Extent extent) {
+    static Mask createBlockBlacklistMask(Extent extent, Collection<Material> materials) {
         BlockTypeMask blacklistMask = new BlockTypeMask(extent);
 
-        for (Material material : BannerWarConfig.getBlacklistedMaterials()) {
-            blacklistMask.add(BukkitAdapter.asBlockType(material));
+        for (Material material : materials) {
+            var blockType = BukkitAdapter.asBlockType(material);
+            if (blockType != null) blacklistMask.add(blockType);
         }
         return blacklistMask.inverse();
     }
 
-    static Vector extractOriginFromName(String name) {
-        String[] parts = name.split("_");
-        return new Vector(Double.parseDouble(parts[1]), Double.parseDouble(parts[2]), Double.parseDouble(parts[3]));
+    static ClaimFootprint footprintFrom(Collection<TownBlock> townBlocks, World world) {
+        Collection<ClaimFootprint.Chunk> claims = new ArrayList<>();
+        for (TownBlock block : townBlocks) {
+            if (block == null || block.isOutpost()) continue;
+            var coordinate = block.getWorldCoord();
+            if (!world.equals(coordinate.getBukkitWorld()))
+                throw new IllegalArgumentException("Snapshot claims span multiple worlds");
+            claims.add(new ClaimFootprint.Chunk(coordinate.getX(), coordinate.getZ()));
+        }
+        return new ClaimFootprint(claims);
+    }
+
+    /** Used only to upgrade old snapshots; persisted v2 footprints never consult current ownership. */
+    static ClaimFootprint footprintFromCoords(Collection<WorldCoord> coordinates, World world) {
+        Collection<ClaimFootprint.Chunk> claims = new ArrayList<>();
+        for (WorldCoord coordinate : coordinates) {
+            if (!world.equals(coordinate.getBukkitWorld()))
+                throw new IllegalArgumentException("Snapshot claims span multiple worlds");
+            TownBlock block = TownyAPI.getInstance().getTownBlock(coordinate);
+            if (block != null && block.isOutpost()) continue;
+            claims.add(new ClaimFootprint.Chunk(coordinate.getX(), coordinate.getZ()));
+        }
+        return new ClaimFootprint(claims);
+    }
+
+    static Bounds bounds(BoundingBox box) {
+        return new Bounds((int) box.getMinX(), (int) box.getMinY(), (int) box.getMinZ(),
+            (int) box.getMaxX(), (int) box.getMaxY(), (int) box.getMaxZ());
+    }
+
+    static BoundingBox box(Bounds bounds) {
+        return new BoundingBox(bounds.minX(), bounds.minY(), bounds.minZ(), bounds.maxX(), bounds.maxY(), bounds.maxZ());
+    }
+
+    static CuboidRegion region(Bounds bounds) {
+        return new CuboidRegion(BlockVector3.at(bounds.minX(), bounds.minY(), bounds.minZ()),
+            BlockVector3.at(bounds.maxX() - 1, bounds.maxY() - 1, bounds.maxZ() - 1));
+    }
+
+    static Bounds intersect(Bounds a, Bounds b) {
+        return new Bounds(Math.max(a.minX(), b.minX()), Math.max(a.minY(), b.minY()), Math.max(a.minZ(), b.minZ()),
+            Math.min(a.maxX(), b.maxX()), Math.min(a.maxY(), b.maxY()), Math.min(a.maxZ(), b.maxZ()));
+    }
+
+    static Path legacyFile(Path structures, String townName, BoundingBox box) {
+        String file = townName + "_" + (int) box.getMinX() + "_" + (int) box.getMinY() + "_"
+            + (int) box.getMinZ() + ".schem";
+        Path result = structures.resolve(file).normalize();
+        if (!structures.normalize().equals(result.getParent()))
+            throw new IllegalArgumentException("Invalid legacy schematic name");
+        return result;
     }
 
     /**
@@ -87,6 +143,9 @@ final class WorldEditHelper {
         int gridStepX = limits.getBlockX();
         int gridStepY = limits.getBlockY();
         int gridStepZ = limits.getBlockZ();
+
+        if (gridStepX <= 0 || gridStepY <= 0 || gridStepZ <= 0)
+            throw new IllegalArgumentException("Batch dimensions must be positive");
 
         for (int x = minX; x < maxX; x += gridStepX) {
             int upperX = Math.min(x + gridStepX, maxX);

@@ -216,10 +216,12 @@ public class FlagWar extends JavaPlugin {
     public void onDisable() {
         FW_LOGGER.log(Level.INFO, () -> Translate.from("shutdown.cancel-all"));
         battleClock.kill();
+        io.github.townyadvanced.flagwar.worldedit.WorldEditService.shutdown();
         BattleManager.deleteBossBars();
         CivicsUtil.unRegisterCivTechs();
 
         try {
+            battleDatabase.shutdown();
             databaseManager.shutdown();
         } catch (SQLException ex) {
             ex.printStackTrace();

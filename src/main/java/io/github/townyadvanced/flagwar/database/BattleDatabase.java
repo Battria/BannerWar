@@ -12,9 +12,22 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 public final class BattleDatabase {
+
+    // Stage changes must reach storage in submission order, especially before world restoration.
+    private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "BannerWar-BattleStorage");
+        thread.setDaemon(true);
+        return thread;
+    });
+
+    private static final String BATTLE_COLUMNS = " (ContestedTown, Attacker, Defender, HomeX, HomeZ, StageStartTime, "
+        + "CityState, Stage, World, TownBlocks, InitialMayor, Spawn, OutpostSpawns, BannerPlacer, SnapshotId)";
 
     /** Holds the name of the battle table. */
     private static final String BATTLE_TABLE = "Battle";
@@ -41,20 +54,21 @@ public final class BattleDatabase {
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
                         battles.add(new BattleRecord(
-                            rs.getString(1),
-                            rs.getString(2),
-                            rs.getString(3),
-                            rs.getInt(4),
-                            rs.getInt(5),
-                            rs.getLong(6),
-                            rs.getBoolean(7),
-                            BattleStage.valueOf(rs.getString(8)),
-                            UUID.fromString(rs.getString(9)),
-                            BattleUtil.toWorldCoords(rs.getString(9), rs.getString(10)),
-                            UUID.fromString(rs.getString(11)),
-                            BattleUtil.toLocation(rs.getString(12)),
-                            BattleUtil.toLocations(rs.getString(13)),
-                            TownyAPI.getInstance().getResident(rs.getString(14))
+                            rs.getString("ContestedTown"),
+                            rs.getString("Attacker"),
+                            rs.getString("Defender"),
+                            rs.getInt("HomeX"),
+                            rs.getInt("HomeZ"),
+                            rs.getLong("StageStartTime"),
+                            rs.getBoolean("CityState"),
+                            BattleStage.valueOf(rs.getString("Stage")),
+                            UUID.fromString(rs.getString("World")),
+                            BattleUtil.toWorldCoords(rs.getString("World"), rs.getString("TownBlocks")),
+                            UUID.fromString(rs.getString("InitialMayor")),
+                            BattleUtil.toLocation(rs.getString("Spawn")),
+                            BattleUtil.toLocations(rs.getString("OutpostSpawns")),
+                            TownyAPI.getInstance().getResident(rs.getString("BannerPlacer")),
+                            rs.getString("SnapshotId") == null ? null : UUID.fromString(rs.getString("SnapshotId"))
                         ));
                     }
                     return battles;
@@ -63,12 +77,12 @@ public final class BattleDatabase {
                 LOGGER.severe(e.getMessage());
                 return new ArrayList<>();
             }
-        });
+        }, executor);
     }
 
     public CompletableFuture<Void> insertBattle(BattleRecord r) {
         return CompletableFuture.runAsync(() -> {
-            String query = "INSERT INTO " + BATTLE_TABLE + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+            String query = "INSERT INTO " + BATTLE_TABLE + BATTLE_COLUMNS + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
             try (PreparedStatement ps = MANAGER.getConnection().prepareStatement(query)) {
 
                 ps.setString(1, r.contestedTown());
@@ -85,19 +99,20 @@ public final class BattleDatabase {
                 ps.setString(12, BattleUtil.fromLocation(r.spawn()));
                 ps.setString(13, BattleUtil.fromLocations(r.outpostSpawns()));
                 ps.setString(14, r.bannerPlacer().getName());
+                ps.setString(15, r.snapshotId() == null ? null : r.snapshotId().toString());
 
                 ps.executeUpdate();
 
             } catch (SQLException e) {
                 LOGGER.severe(e.getMessage());
             }
-        });
+        }, executor);
     }
 
     @CanIgnoreReturnValue
     public CompletableFuture<Void> insertOrUpdate(BattleRecord r) {
         return CompletableFuture.runAsync(() -> {
-            String query = "INSERT OR REPLACE INTO " + BATTLE_TABLE + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+            String query = "INSERT OR REPLACE INTO " + BATTLE_TABLE + BATTLE_COLUMNS + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
             try (PreparedStatement ps = MANAGER.getConnection().prepareStatement(query)) {
 
                 ps.setString(1, r.contestedTown());
@@ -114,14 +129,15 @@ public final class BattleDatabase {
                 ps.setString(12, BattleUtil.fromLocation(r.spawn()));
                 ps.setString(13, BattleUtil.fromLocations(r.outpostSpawns()));
                 ps.setString(14, r.bannerPlacer().getName());
+                ps.setString(15, r.snapshotId() == null ? null : r.snapshotId().toString());
 
                 if (ps.executeUpdate() <= 0)
-                    LOGGER.warning("Failed to add battle " + r.contestedTown() + " to database!");
+                    throw new SQLException("Failed to add battle " + r.contestedTown() + " to database!");
 
             } catch (SQLException e) {
-                LOGGER.severe(e.getMessage());
+                throw new java.util.concurrent.CompletionException(e);
             }
-        });
+        }, executor);
     }
 
     public CompletableFuture<Void> deleteBattle(String contestedTown) {
@@ -134,7 +150,18 @@ public final class BattleDatabase {
             catch(SQLException e) {
                 LOGGER.severe(e.getMessage());
             }
-        });
+        }, executor);
+    }
+
+    /** Drain only database writes; these jobs never wait for the server scheduler. */
+    public void shutdown() {
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS))
+                LOGGER.warning("Battle storage did not finish within five seconds during shutdown");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     public CompletableFuture<Void> reset() {
@@ -145,7 +172,7 @@ public final class BattleDatabase {
             } catch (SQLException e) {
                 LOGGER.severe(e.getMessage());
             }
-        });
+        }, executor);
     }
 
     public CompletableFuture<Collection<BannerPlacerRecord>> getBannerPlacers() {
@@ -169,7 +196,7 @@ public final class BattleDatabase {
                 LOGGER.severe(e.getMessage());
                 return new ArrayList<>();
             }
-        });
+        }, executor);
     }
 
     public CompletableFuture<Void> insertOrUpdate(BannerPlacerRecord r) {
@@ -186,6 +213,6 @@ public final class BattleDatabase {
             } catch (SQLException e) {
                 LOGGER.severe(e.getMessage());
             }
-        });
+        }, executor);
     }
 }

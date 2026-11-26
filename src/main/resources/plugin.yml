@@ -22,6 +22,7 @@ softdepend:
     - AdminCore
     - DecentHolograms
     - WorldEdit
+    - FastAsyncWorldEdit
     - PlayerLocatorAPI
     - WayfinderAPI
     - Boutique
