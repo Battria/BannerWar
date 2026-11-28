@@ -1,5 +1,6 @@
 package io.github.townyadvanced.flagwar.config;
 
+import com.palmergames.bukkit.util.Colors;
 import io.github.townyadvanced.flagwar.FlagWar;
 import io.github.townyadvanced.flagwar.objects.BattleStage;
 import org.bukkit.ChatColor;
@@ -278,6 +279,13 @@ public class BannerWarConfig {
             PLUGIN.getLogger().warning("Could not find color for name! " + e.getMessage() + ". Will use YELLOW as a default.");
             return ChatColor.YELLOW;
         }
+    }
+
+    /** Prefix name color, supporting both legacy color names and #RRGGBB values. */
+    public static String getNameColorCode() {
+        String color = PLUGIN.getConfig().getString("universe.name_color", "#792A31");
+        if (color.matches("#[0-9a-fA-F]{6}")) return Colors.translateColorCodes("&" + color);
+        return getNameColor().toString();
     }
 
     public static String getBroadcasterName() {

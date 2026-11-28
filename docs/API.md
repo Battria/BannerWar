@@ -116,7 +116,8 @@ This class exposes BannerWar's newer battle-level state and player-association h
 | `getBattle(Town town)` | `Battle` | Battle associated with the town, or `null`. |
 | `getBattle(String townName)` | `Battle` | Name-based battle lookup, or `null`. |
 | `getBattleAt(TownBlock townBlock)` | `Battle` | Battle whose initial townblock set contains the provided townblock, or `null`. |
-| `getBattleAt(WorldCoord coord)` | `Battle` | Looks up the Towny townblock at the coordinate and delegates to `getBattleAt(TownBlock)`. |
+| `getBattleAt(WorldCoord coord)` | `Battle` | Matches the saved original claim coordinates, including the world, independently of current ownership or claim existence. |
+| `isExplosionAllowedAt(WorldCoord coord)` | `boolean` | Whether an original battle claim permits explosions: `FLAG` or `RUINED`, with its snapshot successfully prepared or validated. Captured claims remain eligible; expanded tracking regions are excluded. |
 | `getBattleRegions(Battle battle)` | `Collection<BoundingBox>` | Newly-created, 64-block-expanded region boxes derived from the battle's initial claims. They remain stable when claims change and across server restarts. |
 | `isAssociatedWithNation(Resident res, Nation nat)` | `boolean` | Whether a resident belongs to the nation or one of its allies. |
 | `isAssociatedWithAttacker(Resident res, Battle battle)` | `boolean` | Whether a resident is associated with the attacking nation. |
@@ -172,6 +173,7 @@ Enum: `io.github.townyadvanced.flagwar.objects.BattleStage`
 | `isInactive()` | `boolean` | `true` outside `PRE_FLAG` and `FLAG`. |
 | `isActive()` | `boolean` | Opposite of `isInactive()`. |
 | `isFlagging()` | `boolean` | Whether the battle is in `FLAG`. |
+| `isAllowingExplosions()` | `boolean` | Whether the battle is in `FLAG` or `RUINED` and its pre-war snapshot is ready. `PRE_FLAG`, `DORMANT`, `END`, and loading or failed snapshots deny explosions. |
 | `getCellUnderAttack(int x, int z)` | `CellUnderAttack` | Active flag at the given cell coordinates for this battle, or `null`. |
 | `getFlagOwners()` | `Collection<String>` | Names of players with flags associated with the battle. |
 

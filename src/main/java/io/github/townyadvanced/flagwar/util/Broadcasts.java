@@ -157,7 +157,7 @@ public final class Broadcasts {
      * @param isServerBroadcast whether the prefix should be built to accommodate a server broadcast
      */
     private static String buildPrefix(boolean isServerBroadcast) {
-        final ChatColor NAME_COLOR = BannerWarConfig.getNameColor();
+        final String NAME_COLOR = BannerWarConfig.getNameColorCode();
         final ChatColor BRACKET_COLOR = BannerWarConfig.getBracketColor();
         final String SERVER_PART = isServerBroadcast ? ChatColor.BOLD + "" : "";
         final String NAME = BannerWarConfig.getBroadcasterName();

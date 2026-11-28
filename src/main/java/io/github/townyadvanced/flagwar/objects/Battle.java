@@ -387,8 +387,16 @@ public class Battle {
      * The function to be called when a defense is lost (homeblock is won).
      */
     public void loseDefense() {
+        if (stage != BattleStage.FLAG) return;
         endWarProcedures();
-        ruin();
+        if (isCityState()) {
+            // TownyAI handles deletion from BattleEndEvent, while Towny still has the town and nation.
+            setStage(BattleStage.END);
+            deleteBossBar();
+            MANAGER.removeBattleAndDB(this);
+        } else {
+            ruin();
+        }
         Bukkit.getPluginManager().callEvent(new BattleEndEvent(this, false));
     }
 
@@ -478,7 +486,7 @@ public class Battle {
     /** Procedures to be performed at the end of a war, regardless of the result,
      * such as transferring ownership of {@link TownBlock}s back and cancelling ongoing flags. */
     private void endWarProcedures() {
-        for (String n : flags) FlagWar.removeAttackerFlags(n);
+        for (String n : List.copyOf(flags)) FlagWar.removeAttackerFlags(n);
         transferBlockOwnership(getContestedTown(), getInitialTownBlocks(), getHomeBlock());
     }
 
@@ -724,5 +732,11 @@ public class Battle {
     public boolean isFlagging() {
         return getCurrentStage() == BattleStage.FLAG && snapshotReady != null
             && snapshotReady.isDone() && !snapshotReady.isCompletedExceptionally();
+    }
+
+    /** Explosions require a validated snapshot and either the FLAG or RUINED stage. */
+    public boolean isAllowingExplosions() {
+        return (getCurrentStage() == BattleStage.FLAG || getCurrentStage() == BattleStage.RUINED)
+            && snapshotReady != null && snapshotReady.isDone() && !snapshotReady.isCompletedExceptionally();
     }
 }

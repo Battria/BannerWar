@@ -21,6 +21,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.logging.Level;
 
 public final class BattleManager {
 
@@ -152,20 +153,29 @@ public final class BattleManager {
      * @param defender the nation that houses the {@link Town} where the {@link Battle} is hosted
      */
     public void startBattle(Town contestedTown, Nation attacker, Nation defender, Resident bannerPlacer) {
+        String townName = contestedTown.getName();
+        var townyAI = Bukkit.getPluginManager().getPlugin("townyAI");
+        if (townyAI != null && !townyAI.isEnabled()) {
+            PLUGIN.getLogger().warning("Cannot start battle at " + townName + ": townyAI is disabled.");
+            return;
+        }
+        CompletableFuture<Boolean> cityState = townyAI == null
+            ? CompletableFuture.completedFuture(false)
+            : TownyAI.getTownyAIAPI().isCityStateAsync(townName);
+        cityState.thenAcceptAsync(result -> {
+            if (TownyAPI.getInstance().getTown(townName) != contestedTown || getBattle(townName) != null) return;
+            Town bannerPlacerTown = bannerPlacer.getTownOrNull();
+            Battle battle = new Battle(attacker, defender, contestedTown, result, this, bannerPlacer);
+            ACTIVE_BATTLES.put(townName, battle);
+            saveBattle(battle);
 
-        TownyAI.getTownyAIAPI().isCityStateAsync(contestedTown.getName()).thenAccept(result ->
-            CompletableFuture.runAsync(() -> {
-                Town bannerPlacerTown = bannerPlacer.getTownOrNull();
-                Battle battle = new Battle(attacker, defender, contestedTown, result, this, bannerPlacer);
-                ACTIVE_BATTLES.put(contestedTown.getName(), battle);
-                saveBattle(battle);
+            logBannerPlacer(BannerPlacerRecord.of(bannerPlacerTown));
 
-                logBannerPlacer(BannerPlacerRecord.of(bannerPlacerTown));
-
-                Bukkit.getServer().getPluginManager().callEvent(new BattleStartEvent(battle, bannerPlacerTown));
-
-            }, runnable -> SCHEDULER.runTask(PLUGIN, runnable))
-        );
+            Bukkit.getServer().getPluginManager().callEvent(new BattleStartEvent(battle, bannerPlacerTown));
+        }, runnable -> SCHEDULER.runTask(PLUGIN, runnable)).exceptionally(error -> {
+            PLUGIN.getLogger().log(Level.SEVERE, "Could not start battle at " + townName, error);
+            return null;
+        });
     }
 
     /**
