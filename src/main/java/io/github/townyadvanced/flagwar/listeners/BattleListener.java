@@ -29,7 +29,6 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.plugin.java.JavaPlugin;
 import org.flintstqne.townyCivics.api.TownyCivicsAPI;
 
 public class BattleListener implements Listener {
@@ -176,9 +175,14 @@ public class BattleListener implements Listener {
         String att = battle.getAttacker().getName();
         String twn = battle.getContestedTown().getName();
 
-        String message = event.isDefenseWon() ?
-            def + " has successfully defended " + twn + " from " + att + ". The defender is victorious!" :
-            att + " has defeated " + def + " in battle, and reduced " + twn + " to ruins! The attacker is victorious!";
+        String message;
+        if (event.isDefenseWon()) {
+            message = def + " has successfully defended " + twn + " from " + att + ". The defender is victorious!";
+        } else if (battle.isCityState()) {
+            message = att + " has defeated the city-state of " + twn + "!";
+        } else {
+            message = att + " has defeated " + def + " in battle, and reduced " + twn + " to ruins! The attacker is victorious!";
+        }
 
         Broadcasts.broadcastMessage(message);
     }

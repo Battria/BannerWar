@@ -21,6 +21,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.logging.Level;
 
 public final class BattleManager {
 
@@ -69,9 +70,11 @@ public final class BattleManager {
 
                 Battle battle = new Battle(r, this);
                 ACTIVE_BATTLES.put(r.contestedTown(), battle);
+                saveBattle(battle);
                 PLUGIN.getLogger().info("Battle " + r.contestedTown() + " has been resumed");
 
                 Bukkit.getPluginManager().callEvent(new BattleResumeEvent(battle));
+                if (battle.getCurrentStage() == BattleStage.DORMANT) battle.retryRestoration();
             }
             battlesResumed.complete(null);
         }, runnable -> SCHEDULER.runTask(PLUGIN, runnable)).exceptionally(ex -> {
@@ -135,9 +138,8 @@ public final class BattleManager {
                 return null;
             });
 
-            BattleRecord rec = BattleRecord.of(battle);
-            if (battle.getHomeBlock() != null && battle.getContestedTown() != null && rec != null)
-                DATABASE.insertOrUpdate(rec);
+            if (battle.getHomeBlock() != null && battle.getContestedTown() != null)
+                saveBattle(battle);
         }
     }
 
@@ -151,19 +153,29 @@ public final class BattleManager {
      * @param defender the nation that houses the {@link Town} where the {@link Battle} is hosted
      */
     public void startBattle(Town contestedTown, Nation attacker, Nation defender, Resident bannerPlacer) {
+        String townName = contestedTown.getName();
+        var townyAI = Bukkit.getPluginManager().getPlugin("townyAI");
+        if (townyAI != null && !townyAI.isEnabled()) {
+            PLUGIN.getLogger().warning("Cannot start battle at " + townName + ": townyAI is disabled.");
+            return;
+        }
+        CompletableFuture<Boolean> cityState = townyAI == null
+            ? CompletableFuture.completedFuture(false)
+            : TownyAI.getTownyAIAPI().isCityStateAsync(townName);
+        cityState.thenAcceptAsync(result -> {
+            if (TownyAPI.getInstance().getTown(townName) != contestedTown || getBattle(townName) != null) return;
+            Town bannerPlacerTown = bannerPlacer.getTownOrNull();
+            Battle battle = new Battle(attacker, defender, contestedTown, result, this, bannerPlacer);
+            ACTIVE_BATTLES.put(townName, battle);
+            saveBattle(battle);
 
-        TownyAI.getTownyAIAPI().isCityStateAsync(contestedTown.getName()).thenAccept(result ->
-            CompletableFuture.runAsync(() -> {
-                Town bannerPlacerTown = bannerPlacer.getTownOrNull();
-                Battle battle = new Battle(attacker, defender, contestedTown, result, this, bannerPlacer);
-                ACTIVE_BATTLES.put(contestedTown.getName(), battle);
+            logBannerPlacer(BannerPlacerRecord.of(bannerPlacerTown));
 
-                logBannerPlacer(BannerPlacerRecord.of(bannerPlacerTown));
-
-                Bukkit.getServer().getPluginManager().callEvent(new BattleStartEvent(battle, bannerPlacerTown));
-
-            }, runnable -> SCHEDULER.runTask(PLUGIN, runnable))
-        );
+            Bukkit.getServer().getPluginManager().callEvent(new BattleStartEvent(battle, bannerPlacerTown));
+        }, runnable -> SCHEDULER.runTask(PLUGIN, runnable)).exceptionally(error -> {
+            PLUGIN.getLogger().log(Level.SEVERE, "Could not start battle at " + townName, error);
+            return null;
+        });
     }
 
     /**
@@ -171,7 +183,31 @@ public final class BattleManager {
      * @param townName the specified town name
      */
     public static Battle getBattle(String townName) {
-        return ACTIVE_BATTLES.getOrDefault(townName, null);
+        Battle direct = ACTIVE_BATTLES.get(townName);
+        if (direct != null) return direct;
+        // Towny may rename a town between periodic saves. Snapshot identity remains its UUID.
+        return ACTIVE_BATTLES.values().stream()
+            .filter(battle -> battle.getContestedTown().getName().equals(townName)).findFirst().orElse(null);
+    }
+
+    /** Saves identity and stage immediately, including before restoration starts. */
+    public CompletableFuture<Void> saveBattle(Battle battle) {
+        // A snapshot can finish after the battle was cancelled; never resurrect its database record.
+        if (!ACTIVE_BATTLES.containsValue(battle)) return CompletableFuture.completedFuture(null);
+        String townName = battle.getContestedTown().getName();
+        for (String key : new ArrayList<>(ACTIVE_BATTLES.keySet())) {
+            if (ACTIVE_BATTLES.get(key) == battle && !key.equals(townName)) {
+                ACTIVE_BATTLES.remove(key);
+                DATABASE.deleteBattle(key);
+            }
+        }
+        ACTIVE_BATTLES.put(townName, battle);
+        BattleRecord record = BattleRecord.of(battle);
+        if (record == null) return CompletableFuture.failedFuture(new IllegalStateException("Could not record battle"));
+        return DATABASE.insertOrUpdate(record).whenComplete((ignored, error) -> {
+            if (error != null) PLUGIN.getLogger().log(java.util.logging.Level.SEVERE,
+                "Could not persist battle " + record.contestedTown() + "; restoration will not start without its recovery record.", error);
+        });
     }
 
     /**
@@ -187,8 +223,11 @@ public final class BattleManager {
      * @param battle the specified {@link Battle}
      * */
     public void removeBattleAndDB(Battle battle) {
+        Collection<String> keys = new java.util.HashSet<>();
+        ACTIVE_BATTLES.forEach((key, value) -> { if (value == battle) keys.add(key); });
+        keys.add(battle.getContestedTown().getName());
         removeBattle(battle);
-        DATABASE.deleteBattle(battle.getContestedTown().getName());
+        keys.forEach(DATABASE::deleteBattle);
     }
 
     /**

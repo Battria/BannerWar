@@ -38,7 +38,8 @@ public final class DatabaseManager {
             InitialMayor TEXT NOT NULL,
             Spawn TEXT,
             OutpostSpawns TEXT NOT NULL DEFAULT '',
-            BannerPlacer TEXT NOT NULL
+            BannerPlacer TEXT NOT NULL,
+            SnapshotId TEXT
         );
         """,
         """
@@ -178,6 +179,8 @@ public final class DatabaseManager {
                 stmt.execute("ALTER TABLE Battle ADD COLUMN Spawn TEXT;");
             if (!tableHasColumn(BATTLE_TABLE_NAME, "OutpostSpawns"))
                 stmt.execute("ALTER TABLE Battle ADD COLUMN OutpostSpawns TEXT NOT NULL DEFAULT '';");
+            if (!tableHasColumn(BATTLE_TABLE_NAME, "SnapshotId"))
+                stmt.execute("ALTER TABLE Battle ADD COLUMN SnapshotId TEXT;");
         }
     }
 

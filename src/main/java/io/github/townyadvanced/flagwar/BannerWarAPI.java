@@ -57,22 +57,32 @@ public final class BannerWarAPI {
      * @param townBlock the specified {@link TownBlock}
      */
     public static Battle getBattleAt(TownBlock townBlock) {
+        return townBlock == null ? null : getBattleAt(townBlock.getWorldCoord());
+    }
 
-        if (townBlock == null) return null;
-
-        for (Battle b : BattleManager.getActiveBattles()) {
-            for (TownBlock other : b.getInitialTownBlocks()) {
-                int x = other.getX();
-                int z = other.getZ();
-                if (x == townBlock.getX() && z == townBlock.getZ()) return b;
-            }
+    /**
+     * Looks up the original battle footprint, including the world, independently of current claims.
+     * @return the battle at this coordinate, or {@code null}
+     */
+    public static Battle getBattleAt(WorldCoord coord) {
+        if (coord == null) return null;
+        for (Battle battle : BattleManager.getActiveBattles()) {
+            if (battle.getInitialTownBlocksAsWorldCoords().contains(coord)) return battle;
         }
-
         return null;
     }
 
-    public static Battle getBattleAt(WorldCoord coord) {
-        return getBattleAt(TownyAPI.getInstance().getTownBlock(coord));
+    /**
+     * Whether this coordinate is in an original battle footprint that currently permits explosions.
+     * Captured claims remain in the footprint. PRE_FLAG and snapshots still loading after restart
+     * never permit explosions. Unlike {@link #getBattleRegions(Battle)}, no buffer is included.
+     */
+    public static boolean isExplosionAllowedAt(WorldCoord coord) {
+        if (coord == null) return false;
+        for (Battle battle : BattleManager.getActiveBattles()) {
+            if (battle.getInitialTownBlocksAsWorldCoords().contains(coord) && battle.isAllowingExplosions()) return true;
+        }
+        return false;
     }
 
     /**
@@ -223,7 +233,7 @@ public final class BannerWarAPI {
      */
     public static CompletableFuture<Collection<Player>> getAllBots() {
 
-        if (Bukkit.getServer().getPluginManager().getPlugin("townyAI") == null) {
+        if (!Bukkit.getPluginManager().isPluginEnabled("townyAI")) {
             return CompletableFuture.completedFuture(new ArrayList<>());
         }
 

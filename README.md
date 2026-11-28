@@ -77,13 +77,17 @@ layout.
 
 * The plugin records the defending town's initial townblocks, homeblock, mayor, spawn, and outpost
   spawns.
-* FastAsyncWorldEdit/WorldEdit support snapshots the contested town's initial non-outpost chunks into a
-  `.schem` file.
+* FastAsyncWorldEdit snapshots the contested town's actual initial non-outpost chunks, including
+  disconnected regions. Volume-budgeted subdivision combines filled areas and uses full-height edge
+  chunks where possible, with one worker shared across all battles.
 * When a battle ends or a ruined town recovers, the town's blocks are pasted back with configurable
   material blacklists.
-* Restoration avoids pasting air, skips blacklisted materials, removes dropped items in the restored
+* Restoration pastes air to remove wartime additions, skips blacklisted source materials, removes dropped items in the restored
   region, and attempts to move suffocating players out safely.
 * Pre-war Towny metadata is restored and verified, including homeblock, spawn, and outpost spawns.
+* Snapshot failures block combat phase advancement. Restoration failures retain the snapshot and keep
+  the battle dormant; `/pa <TownName>` retries restoration before the battle can be removed.
+  See [batching and recovery testing](docs/worldedit-batching.md).
 
 ### TownyCivics integration
 
@@ -154,7 +158,7 @@ BannerWar is built as a Bukkit/Paper plugin for modern Towny servers.
 | Towny | Required | Current dependency target is Towny `0.102.0.0`. |
 | townyAI | Required | Used for city-state and bot-aware battle behavior. |
 | TownyCivics | Provided dependency | Enables CivTech and war-weariness systems. |
-| WorldEdit / FAWE | Optional but recommended | Used for town snapshots and restoration. |
+| FastAsyncWorldEdit | Required for battle snapshots | Used for batched town snapshots and restoration. |
 | DecentHolograms | Optional | Used for configurable war-flag holograms. |
 | Boutique | Optional | Used for custom flag toppers. |
 | WayfinderAPI | Optional integration | Used by BannerWar's waypoint manager when available. |

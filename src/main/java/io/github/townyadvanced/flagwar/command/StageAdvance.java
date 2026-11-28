@@ -2,6 +2,7 @@ package io.github.townyadvanced.flagwar.command;
 
 import io.github.townyadvanced.flagwar.BannerWarAPI;
 import io.github.townyadvanced.flagwar.objects.BattleStage;
+import io.github.townyadvanced.flagwar.objects.Battle;
 import io.github.townyadvanced.flagwar.util.Broadcasts;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
@@ -29,6 +30,27 @@ public class StageAdvance implements CommandExecutor {
         else return false;
 
         String townName = strings[0];
+
+        if (commandSender instanceof Player player && !player.isOp()) {
+            Broadcasts.sendErrorMessage(player, "You do not have permission to execute this command.");
+            return true;
+        }
+        Battle battle = BannerWarAPI.getBattle(townName);
+        if (battle != null) {
+            if (battle.getCurrentStage() == BattleStage.DORMANT && !battle.isRestorationComplete()) {
+                boolean running = battle.isRestorationRunning();
+                battle.retryRestoration();
+                commandSender.sendMessage(ChatColor.YELLOW + (running ? "Town restoration is still running."
+                    : "Town restoration retry queued. Check the server log for progress.")
+                    + " Battle remains DORMANT until restoration succeeds.");
+                return true;
+            }
+            String blocked = battle.getStageAdvanceBlockReason();
+            if (blocked != null) {
+                commandSender.sendMessage(ChatColor.YELLOW + "Cannot advance " + townName + ": " + blocked);
+                return true;
+            }
+        }
 
         if (commandSender instanceof Player p) {
             if (!p.isOp()) {

@@ -1,5 +1,6 @@
 package io.github.townyadvanced.flagwar.config;
 
+import com.palmergames.bukkit.util.Colors;
 import io.github.townyadvanced.flagwar.FlagWar;
 import io.github.townyadvanced.flagwar.objects.BattleStage;
 import org.bukkit.ChatColor;
@@ -41,6 +42,18 @@ public class BannerWarConfig {
 
     public static int getCycleSpeedSeconds() {
         return PLUGIN.getConfig().getInt("clock.cycle_speed");
+    }
+
+    /** Maximum horizontal side; narrower batches can extend further vertically within the volume budget. */
+    public static int getWorldEditBatchSize() {
+        return Math.max(16, Math.min(128, PLUGIN.getConfig().getInt("worldedit.batch_size", 64)));
+    }
+
+    /** Defaults to the old cube's volume for configurations predating the explicit block budget. */
+    public static long getWorldEditMaxBlocksPerBatch() {
+        long side = getWorldEditBatchSize();
+        return Math.max(4096L, Math.min(2_097_152L,
+            PLUGIN.getConfig().getLong("worldedit.max_blocks_per_batch", side * side * side)));
     }
 
     /**
@@ -266,6 +279,13 @@ public class BannerWarConfig {
             PLUGIN.getLogger().warning("Could not find color for name! " + e.getMessage() + ". Will use YELLOW as a default.");
             return ChatColor.YELLOW;
         }
+    }
+
+    /** Prefix name color, supporting both legacy color names and #RRGGBB values. */
+    public static String getNameColorCode() {
+        String color = PLUGIN.getConfig().getString("universe.name_color", "#792A31");
+        if (color.matches("#[0-9a-fA-F]{6}")) return Colors.translateColorCodes("&" + color);
+        return getNameColor().toString();
     }
 
     public static String getBroadcasterName() {

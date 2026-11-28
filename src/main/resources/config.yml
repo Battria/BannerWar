@@ -18,6 +18,14 @@
 # Note: Do not modify config_version, unless you want to regenerate your config
 config_version: 1.7
 
+# Town snapshots and restoration use one worker globally.
+worldedit:
+    # Maximum horizontal batch side in blocks. Allowed range: 16..128.
+    batch_size: 64
+    # Maximum block volume per clipboard. Allowed range: 4096..2097152.
+    # Narrow edge batches can use the full world height when they fit this budget.
+    max_blocks_per_batch: 262144
+
 # Please see https://github.com/TownyAdvanced/FlagWar/tree/main/src/main/resources/
 # for available translations. Custom translations are only supported if they are merged.
 translation: "en_US"
@@ -188,8 +196,8 @@ universe:
     # The color of the bracket parts of the prefix used in server broadcasts. Case-insensitive.
     bracket_color: DARK_GRAY
 
-    # The color of the name part of the prefix used in server broadcasts. Case-insensitive.
-    name_color: RED
+    # The color of the name part of the prefix. Accepts a color name or a quoted #RRGGBB value.
+    name_color: '#792A31'
 
     # The name of the entity providing server broadcasts.
     prefix_name: War

@@ -21,6 +21,8 @@ import org.jetbrains.annotations.NotNull;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.logging.Level;
 
 /** Contains all the information required to host a BannerWar battle. */
 public class Battle {
@@ -72,6 +74,12 @@ public class Battle {
     /** Holds the {@link Town} at which the battle is held. */
     private final Resident BANNER_PLACER;
 
+    private final UUID snapshotId;
+    private boolean legacySnapshot;
+    private CompletableFuture<Void> snapshotReady;
+    private boolean restorationRunning;
+    private boolean restorationComplete;
+
     /**
      * Sets up a battle between an attacking nation and a defending nation. <br>
      * @param attacker the attacking nation
@@ -84,7 +92,7 @@ public class Battle {
      * @param stage the {@link BattleStage} of the battle
      * @param initialMayor the {@link Resident} who was mayor of the {@link #CONTESTED_TOWN} at the time of the attack
      */
-    private Battle(Nation attacker, Nation defender, Town contestedTown, Collection<WorldCoord> preWarBlocks, long stm, TownBlock homeBlock, Location spawn, List<Location> outpostSpawns, boolean isCityState, BattleStage stage, Resident initialMayor, BattleManager mgr, Resident bannerPlacer) {
+    private Battle(Nation attacker, Nation defender, Town contestedTown, Collection<WorldCoord> preWarBlocks, long stm, WorldCoord homeBlock, Location spawn, List<Location> outpostSpawns, boolean isCityState, BattleStage stage, Resident initialMayor, BattleManager mgr, Resident bannerPlacer, UUID snapshotId) {
         this.ATTACKER = attacker;
         this.DEFENDER = defender;
         this.CONTESTED_TOWN = contestedTown;
@@ -93,13 +101,14 @@ public class Battle {
         this.stageStartTimeMillis = stm;
         this.isCityState = isCityState;
         this.stage = stage;
-        this.HOME_BLOCK_COORDS = homeBlock.getWorldCoord();
+        this.HOME_BLOCK_COORDS = homeBlock;
         this.INITIAL_MAYOR = initialMayor;
         this.INITIAL_SPAWN = copyLocation(spawn);
         this.INITIAL_OUTPOST_SPAWNS = copyLocations(outpostSpawns);
         this.STAGE_DURATIONS = BattleUtil.computeStageTimes(this);
         this.MANAGER = mgr;
         this.BANNER_PLACER = bannerPlacer;
+        this.snapshotId = snapshotId == null ? UUID.randomUUID() : snapshotId;
 
         createBossBar();
     }
@@ -120,7 +129,7 @@ public class Battle {
             System.currentTimeMillis(),
 
             // before a battle begins, the homeblock existence is checked at the battle listener
-            Objects.requireNonNull(contestedTown.getHomeBlockOrNull()),
+            Objects.requireNonNull(contestedTown.getHomeBlockOrNull()).getWorldCoord(),
             contestedTown.getSpawnOrNull(),
             contestedTown.getAllOutpostSpawns(),
 
@@ -128,10 +137,11 @@ public class Battle {
             BattleStage.PRE_FLAG,
             contestedTown.getMayor(),
             mgr,
-            bannerPlacer
+            bannerPlacer,
+            UUID.randomUUID()
         );
-        var chunks = BattleUtil.chunksFrom(getInitialTownBlocks());
-        WorldEditService.copyToDisk(contestedTown, BattleUtil.boundingBoxFrom(chunks));
+        snapshotReady = WorldEditService.copyTownToDisk(contestedTown, getInitialTownBlocks(), snapshotId);
+        observeSnapshot();
     }
 
     /**
@@ -145,16 +155,60 @@ public class Battle {
             TownyAPI.getInstance().getTown(br.contestedTown()),
             br.townBlocksCoords(),
             br.stageStartTime(),
-            TownyAPI.getInstance().getTownBlock(
-            new WorldCoord(Bukkit.getWorld(br.worldID()), br.homeX(), br.homeZ())),
+            new WorldCoord(Bukkit.getWorld(br.worldID()), br.homeX(), br.homeZ()),
             br.spawn(),
             br.outpostSpawns(),
             br.isCityState(),
             br.stage(),
             TownyAPI.getInstance().getResident(br.initialMayorID()),
             mgr,
-            br.bannerPlacer()
+            br.bannerPlacer(),
+            br.snapshotId()
         );
+        legacySnapshot = br.snapshotId() == null;
+        snapshotReady = WorldEditService.prepareExistingSnapshot(CONTESTED_TOWN, getInitialTownBlocksAsWorldCoords(), snapshotId, legacySnapshot);
+        observeSnapshot();
+    }
+
+    /** A legacy ID is persisted only once its files have been imported successfully. */
+    public UUID getSnapshotIdForStorage() {
+        return legacySnapshot && (snapshotReady == null || !snapshotReady.isDone() || snapshotReady.isCompletedExceptionally())
+            ? null : snapshotId;
+    }
+
+    private void observeSnapshot() {
+        snapshotReady.whenComplete((ignored, error) -> {
+            if (error != null) {
+                FlagWar.getInstance().getLogger().log(Level.SEVERE,
+                    "Snapshot unavailable for " + CONTESTED_TOWN.getName() + "; phase advance is blocked. Files were retained.", error);
+            } else {
+                onServerThread(() -> MANAGER.saveBattle(this));
+            }
+        });
+    }
+
+    private static void onServerThread(Runnable task) {
+        if (!FlagWar.getInstance().isEnabled()) return;
+        if (Bukkit.isPrimaryThread()) task.run();
+        else Bukkit.getScheduler().runTask(FlagWar.getInstance(), task);
+    }
+
+    public boolean isRestorationComplete() {
+        return restorationComplete;
+    }
+
+    public boolean isRestorationRunning() {
+        return restorationRunning;
+    }
+
+    /** Null means a stage advance can proceed. No waiting ever occurs on the server thread. */
+    public String getStageAdvanceBlockReason() {
+        if (stage == BattleStage.END) return null;
+        if (stage == BattleStage.DORMANT && !restorationComplete)
+            return restorationRunning ? "Town restoration is still running." : "Town restoration is incomplete; /pa will retry it.";
+        if (!snapshotReady.isDone()) return "The pre-war snapshot is still being prepared.";
+        if (snapshotReady.isCompletedExceptionally()) return "The pre-war snapshot failed validation. See the server log; files were retained.";
+        return null;
     }
 
     /** Returns the attacking nation. */
@@ -249,7 +303,7 @@ public class Battle {
 
     /** Returns whether more time has elapsed than the duration of a {@link BattleStage} of this battle. */
     public boolean isPendingStageAdvance() {
-        return getTimeRemainingForCurrentStage().isZero();
+        return getStageAdvanceBlockReason() == null && getTimeRemainingForCurrentStage().isZero();
     }
 
     /** Returns the current {@link BattleStage} for this battle. */
@@ -269,6 +323,7 @@ public class Battle {
     public void setStage(BattleStage stage) {
         stageStartTimeMillis = System.currentTimeMillis();
         this.stage = stage;
+        MANAGER.saveBattle(this);
     }
 
     /**
@@ -304,6 +359,11 @@ public class Battle {
      */
     @CanIgnoreReturnValue
     public BattleStage advanceStage(boolean winDefense) {
+        if (stage == BattleStage.DORMANT && !restorationComplete) {
+            retryRestoration();
+            return stage;
+        }
+        if (getStageAdvanceBlockReason() != null) return stage;
         switch (stage) {
             case PRE_FLAG -> makeFlaggable();
             case FLAG -> { if (winDefense) winDefense(); else loseDefense(); }
@@ -318,6 +378,7 @@ public class Battle {
      *  The function to be called when the battle is to allow flags.
      */
     public void makeFlaggable() {
+        if (getStageAdvanceBlockReason() != null) return;
         setStage(BattleStage.FLAG);
         Bukkit.getPluginManager().callEvent(new BattleFlaggableEvent(this));
     }
@@ -326,8 +387,16 @@ public class Battle {
      * The function to be called when a defense is lost (homeblock is won).
      */
     public void loseDefense() {
+        if (stage != BattleStage.FLAG) return;
         endWarProcedures();
-        ruin();
+        if (isCityState()) {
+            // TownyAI handles deletion from BattleEndEvent, while Towny still has the town and nation.
+            setStage(BattleStage.END);
+            deleteBossBar();
+            MANAGER.removeBattleAndDB(this);
+        } else {
+            ruin();
+        }
         Bukkit.getPluginManager().callEvent(new BattleEndEvent(this, false));
     }
 
@@ -363,11 +432,34 @@ public class Battle {
         setStage(BattleStage.DORMANT);
         deleteBossBar();
 
-        WorldEditService.pasteToWorld(getContestedTown()).thenRunAsync(() ->
-            Bukkit.getScheduler().runTask(FlagWar.getInstance(), () ->
-                Bukkit.getPluginManager().callEvent(new TownRegenerationFinishEvent(this))
-            )
-        );
+        retryRestoration();
+    }
+
+    /** Retains DORMANT on failure; a repeated /pa retries restoration instead of ending the battle. */
+    public void retryRestoration() {
+        if (stage != BattleStage.DORMANT || restorationComplete || restorationRunning) return;
+        restorationRunning = true;
+        if (snapshotReady.isCompletedExceptionally()) {
+            snapshotReady = WorldEditService.prepareExistingSnapshot(CONTESTED_TOWN, getInitialTownBlocksAsWorldCoords(), snapshotId, legacySnapshot);
+            observeSnapshot();
+        }
+        MANAGER.saveBattle(this).thenCompose(ignored -> snapshotReady)
+            .thenComposeAsync(ignored -> WorldEditService.pasteTownToWorld(CONTESTED_TOWN, getInitialTownBlocksAsWorldCoords(), snapshotId),
+                task -> Bukkit.getScheduler().runTask(FlagWar.getInstance(), task))
+            .whenComplete((restoredNow, error) -> onServerThread(() -> {
+                restorationRunning = false;
+                if (error != null) {
+                    FlagWar.getInstance().getLogger().log(Level.SEVERE,
+                        "Restoration failed for " + CONTESTED_TOWN.getName()
+                            + ". Battle remains DORMANT; fix the reported problem and use /pa "
+                            + CONTESTED_TOWN.getName() + " to retry. Snapshot files were retained.", error);
+                    return;
+                }
+                restorationComplete = true;
+                FlagWar.getInstance().getLogger().info("Town restoration complete for " + CONTESTED_TOWN.getName());
+                if (Boolean.TRUE.equals(restoredNow))
+                    Bukkit.getPluginManager().callEvent(new TownRegenerationFinishEvent(this));
+            }));
     }
 
     public void prematurelyEndBattle() {
@@ -394,7 +486,7 @@ public class Battle {
     /** Procedures to be performed at the end of a war, regardless of the result,
      * such as transferring ownership of {@link TownBlock}s back and cancelling ongoing flags. */
     private void endWarProcedures() {
-        for (String n : flags) FlagWar.removeAttackerFlags(n);
+        for (String n : List.copyOf(flags)) FlagWar.removeAttackerFlags(n);
         transferBlockOwnership(getContestedTown(), getInitialTownBlocks(), getHomeBlock());
     }
 
@@ -638,6 +730,13 @@ public class Battle {
 
     /** Returns whether the {@link #stage} of this battle is equal to the {@link BattleStage#FLAG} stage.*/
     public boolean isFlagging() {
-        return getCurrentStage() == BattleStage.FLAG;
+        return getCurrentStage() == BattleStage.FLAG && snapshotReady != null
+            && snapshotReady.isDone() && !snapshotReady.isCompletedExceptionally();
+    }
+
+    /** Explosions require a validated snapshot and either the FLAG or RUINED stage. */
+    public boolean isAllowingExplosions() {
+        return (getCurrentStage() == BattleStage.FLAG || getCurrentStage() == BattleStage.RUINED)
+            && snapshotReady != null && snapshotReady.isDone() && !snapshotReady.isCompletedExceptionally();
     }
 }

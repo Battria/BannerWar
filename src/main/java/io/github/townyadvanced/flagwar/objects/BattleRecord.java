@@ -41,7 +41,8 @@ public record BattleRecord (
     UUID initialMayorID,
     Location spawn,
     List<Location> outpostSpawns,
-    Resident bannerPlacer
+    Resident bannerPlacer,
+    UUID snapshotId
 )
 {
     public static BattleRecord of(Battle b) {
@@ -56,11 +57,12 @@ public record BattleRecord (
                 b.isCityState(),
                 b.getCurrentStage(),
                 b.getContestedTown().getWorld().getUID(),
-                BattleUtil.toWorldCoords(b.getInitialTownBlocks()),
+                b.getInitialTownBlocksAsWorldCoords(),
                 b.getInitialMayor().getUUID(),
                 b.getInitialSpawn(),
                 b.getInitialOutpostSpawns(),
-                b.getBannerPlacer()
+                b.getBannerPlacer(),
+                b.getSnapshotIdForStorage()
             );
         } catch (Exception e)  {
             FlagWar.getInstance().getLogger().severe("Error while creating BattleRecord: " + e.getMessage()

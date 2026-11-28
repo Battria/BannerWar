@@ -22,13 +22,14 @@ softdepend:
     - AdminCore
     - DecentHolograms
     - WorldEdit
+    - FastAsyncWorldEdit
     - PlayerLocatorAPI
     - WayfinderAPI
     - Boutique
 
 depend:
     - Towny
-    - townyAI
+# townyAI depends on FlagWar and is looked up at runtime when needed.
 
 commands:
     StageAdvance:
